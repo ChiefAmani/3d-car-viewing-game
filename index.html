@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Car Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: sans-serif;
+            font-size: 24px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading...</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.min.js"></script>
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        
+        // Camera setup
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 5);
+
+        // Renderer setup
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // OrbitControls for drag-to-rotate
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 20, 10);
+        scene.add(directionalLight);
+
+        // Starfield Background
+        const starsGeometry = new THREE.BufferGeometry();
+        const starsCount = 5000;
+        const posArray = new Float32Array(starsCount * 3);
+
+        for(let i = 0; i < starsCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 100;
+        }
+
+        starsGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const starsMaterial = new THREE.PointsMaterial({
+            size: 0.05,
+            color: 0xffffff
+        });
+        const starMesh = new THREE.Points(starsGeometry, starsMaterial);
+        scene.add(starMesh);
+
+        // Car Model Loading
+        let car;
+        const loader = new THREE.GLTFLoader();
+        
+        // Using a known public GLTF model (a simple car/truck)
+        const carUrl = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.gltf';
+        
+        loader.load(
+            carUrl,
+            function (gltf) {
+                car = gltf.scene;
+                // Center and scale the model
+                const box = new THREE.Box3().setFromObject(car);
+                const center = box.getCenter(new THREE.Vector3());
+                car.position.sub(center); // Center the model
+                
+                const size = box.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 3 / maxDim;
+                car.scale.set(scale, scale, scale);
+
+                // Create a group to hold the car so we can rotate it around its center
+                const carGroup = new THREE.Group();
+                carGroup.add(car);
+                scene.add(carGroup);
+                car = carGroup; // Reassign to group for animation
+
+                document.getElementById('loading').style.display = 'none';
+            },
+            undefined,
+            function (error) {
+                console.error('Error loading GLTF model, using fallback primitive car.', error);
+                
+                // Fallback: Create a primitive car if GLTF fails
+                car = new THREE.Group();
+                
+                // Body
+                const bodyGeo = new THREE.BoxGeometry(2, 0.5, 4);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.5;
+                car.add(body);
+
+                // Cabin
+                const cabinGeo = new THREE.BoxGeometry(1.5, 0.5, 2);
+                const cabinMat = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+                const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+                cabin.position.y = 1;
+                cabin.position.z = -0.5;
+                car.add(cabin);
+
+                // Wheels
+                const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.2, 32);
+                const wheelMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+                
+                const wheelPositions = [
+                    [-1.1, 0.4, 1.2],
+                    [1.1, 0.4, 1.2],
+                    [-1.1, 0.4, -1.2],
+                    [1.1, 0.4, -1.2]
+                ];
+
+                wheelPositions.forEach(pos => {
+                    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+                    wheel.rotation.z = Math.PI / 2;
+                    wheel.position.set(...pos);
+                    car.add(wheel);
+                });
+
+                scene.add(car);
+                document.getElementById('loading').style.display = 'none';
+            }
+        );
+
+        // Window resize handler
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Rotate car slowly
+            if (car) {
+                car.rotation.y += 0.005;
+            }
+
+            // Rotate starfield slowly
+            starMesh.rotation.y -= 0.0005;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
