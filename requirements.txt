@@ -1,0 +1,2 @@
+# No backend dependencies required for this static HTML project.
+# A simple HTTP server can be used to serve the files locally.
